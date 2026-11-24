@@ -25,6 +25,9 @@ export function LoginView({ onSuccess }: LoginViewProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -62,6 +65,12 @@ export function LoginView({ onSuccess }: LoginViewProps) {
             email,
             password,
             jabatan: bootstrapJabatan,
+          })
+        : recoveryMode
+        ? await api.adminRecovery({
+            email,
+            recoveryKey,
+            newPassword,
           })
         : await api.login(email, password);
       onSuccess(auth);
@@ -175,11 +184,17 @@ export function LoginView({ onSuccess }: LoginViewProps) {
               <form onSubmit={handleProdSubmit} className="mt-6 space-y-4">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">
-                    {needsBootstrap ? 'Aktivasi Admin Humas Pertama' : 'Masuk ke Sistem'}
+                    {needsBootstrap
+                      ? 'Aktivasi Admin Humas Pertama'
+                      : recoveryMode
+                      ? 'Atur Ulang Password Admin Humas'
+                      : 'Masuk ke Sistem'}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
                     {needsBootstrap
                       ? 'Belum ada akun terdaftar pada lingkungan produksi. Daftarkan Admin Humas pertama untuk mulai mengelola pengguna.'
+                      : recoveryMode
+                      ? 'Masukkan email Admin Humas, kunci pemulihan (ADMIN_RECOVERY_KEY dari Secrets server), dan password baru.'
                       : 'Masukkan email dan kata sandi akun instansi Anda.'}
                   </p>
                 </div>
@@ -236,36 +251,78 @@ export function LoginView({ onSuccess }: LoginViewProps) {
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">
-                    Password
-                  </label>
-                  <div className="relative mt-1.5">
-                    <input
-                      id="login-password"
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      minLength={needsBootstrap ? 8 : 1}
-                      autoComplete={needsBootstrap ? 'new-password' : 'current-password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={needsBootstrap ? 'Minimal 8 karakter' : 'Masukkan password'}
-                      className="block w-full rounded-lg border border-slate-300 px-3.5 py-2.5 pr-10 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
-                      className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-700"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" aria-hidden="true" />
-                      ) : (
-                        <Eye className="h-4 w-4" aria-hidden="true" />
-                      )}
-                    </button>
+                {recoveryMode ? (
+                  <>
+                    <div>
+                      <label
+                        htmlFor="recovery-key"
+                        className="block text-sm font-medium text-slate-700"
+                      >
+                        Kunci Pemulihan (ADMIN_RECOVERY_KEY)
+                      </label>
+                      <input
+                        id="recovery-key"
+                        type="password"
+                        required
+                        value={recoveryKey}
+                        onChange={(e) => setRecoveryKey(e.target.value)}
+                        placeholder="Sesuai nilai ADMIN_RECOVERY_KEY di Secrets"
+                        className="mt-1.5 block w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="recovery-new-pass"
+                        className="block text-sm font-medium text-slate-700"
+                      >
+                        Password Baru (Minimal 8 Karakter)
+                      </label>
+                      <input
+                        id="recovery-new-pass"
+                        type="password"
+                        required
+                        minLength={8}
+                        maxLength={128}
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Minimal 8 karakter"
+                        className="mt-1.5 block w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">
+                      Password
+                    </label>
+                    <div className="relative mt-1.5">
+                      <input
+                        id="login-password"
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        minLength={needsBootstrap ? 8 : 1}
+                        autoComplete={needsBootstrap ? 'new-password' : 'current-password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder={needsBootstrap ? 'Minimal 8 karakter' : 'Masukkan password'}
+                        className="block w-full rounded-lg border border-slate-300 px-3.5 py-2.5 pr-10 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                        className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-700"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" aria-hidden="true" />
+                        ) : (
+                          <Eye className="h-4 w-4" aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="pt-2">
                   <button
@@ -278,6 +335,8 @@ export function LoginView({ onSuccess }: LoginViewProps) {
                         ? 'Memproses...'
                         : needsBootstrap
                         ? 'Aktifkan Admin Humas & Masuk'
+                        : recoveryMode
+                        ? 'Simpan Password Baru & Masuk'
                         : 'Masuk'}
                     </span>
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -285,10 +344,21 @@ export function LoginView({ onSuccess }: LoginViewProps) {
                 </div>
 
                 {!needsBootstrap && (
-                  <p className="text-xs text-slate-500 pt-2 border-t border-slate-100">
-                    Tidak tersedia pendaftaran mandiri. Permintaan akun baru atau pemulihan akses
-                    dilayani oleh Admin Humas.
-                  </p>
+                  <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
+                    <span>
+                      Tidak tersedia pendaftaran mandiri. Akun dikelola oleh Admin Humas.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecoveryMode((prev) => !prev);
+                        setError(null);
+                      }}
+                      className="text-blue-700 font-medium hover:text-blue-800 whitespace-nowrap shrink-0 text-left"
+                    >
+                      {recoveryMode ? 'Kembali ke Login' : 'Lupa password Admin?'}
+                    </button>
+                  </div>
                 )}
               </form>
             )

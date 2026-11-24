@@ -1,10 +1,16 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import type { WorkspaceMode } from '../src/types.ts';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const UPLOADS_BASE_DIR = path.resolve(process.cwd(), 'uploads');
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const BASE_STORAGE_DIR = IS_SERVERLESS
+  ? path.join(os.tmpdir(), 'social-media-content-hub')
+  : process.cwd();
+
+const DATA_DIR = path.resolve(BASE_STORAGE_DIR, 'data');
+const UPLOADS_BASE_DIR = path.resolve(BASE_STORAGE_DIR, 'uploads');
 
 for (const dir of [
   DATA_DIR,

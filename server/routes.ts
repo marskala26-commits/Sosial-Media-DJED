@@ -201,10 +201,17 @@ function resolveStoredFilePath(workspace: WorkspaceMode, storageKey: string): st
   if (storageKey.startsWith('asset:')) {
     const assetName = storageKey.slice('asset:'.length);
     if (!ALLOWED_DEMO_ASSET_SET.has(assetName)) return null;
-    const assetsDir = path.resolve(process.cwd(), 'src', 'assets', 'images');
-    const resolved = path.resolve(assetsDir, assetName);
-    if (!resolved.startsWith(assetsDir + path.sep)) return null;
-    return resolved;
+    const candidateDirs = [
+      path.resolve(process.cwd(), 'src', 'assets', 'images'),
+      path.resolve(process.cwd(), 'dist', 'src', 'assets', 'images'),
+    ];
+    for (const assetsDir of candidateDirs) {
+      const resolved = path.resolve(assetsDir, assetName);
+      if (resolved.startsWith(assetsDir + path.sep) && fs.existsSync(resolved)) {
+        return resolved;
+      }
+    }
+    return null;
   }
 
   const baseDir = path.resolve(getUploadsDir(workspace));
@@ -544,6 +551,63 @@ export function createApiRouter(): express.Router {
 
     const token = createSessionToken(row.id, 'prod');
     res.json({ token, workspace: 'prod', user: toUserPublic(row) });
+  });
+
+  router.post('/auth/admin-recovery', (req, res) => {
+    const expectedSecret = process.env.ADMIN_RECOVERY_KEY?.trim() ?? '';
+    if (expectedSecret.length < 12) {
+      res.status(503).json({
+        error:
+          'Pemulihan password Admin belum diaktifkan. Tambahkan secret ADMIN_RECOVERY_KEY (minimal 12 karakter) di pengaturan Secrets server.',
+      });
+      return;
+    }
+
+    const { email, recoveryKey, newPassword } = req.body ?? {};
+    if (
+      typeof email !== 'string' ||
+      typeof recoveryKey !== 'string' ||
+      typeof newPassword !== 'string'
+    ) {
+      res.status(400).json({ error: 'Email, kunci pemulihan, dan password baru wajib diisi.' });
+      return;
+    }
+
+    const expectedDigest = crypto.createHash('sha256').update(expectedSecret, 'utf8').digest();
+    const providedDigest = crypto.createHash('sha256').update(recoveryKey.trim(), 'utf8').digest();
+    if (!crypto.timingSafeEqual(expectedDigest, providedDigest)) {
+      res.status(403).json({ error: 'Kunci pemulihan (ADMIN_RECOVERY_KEY) tidak cocok.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      res.status(400).json({ error: 'Format email tidak valid.' });
+      return;
+    }
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      res.status(400).json({ error: 'Password baru minimal 8 karakter.' });
+      return;
+    }
+
+    const prodDb = getDb('prod');
+    const row = prodDb
+      .prepare(`SELECT * FROM users WHERE email = ? AND role = 'admin_humas'`)
+      .get(cleanEmail) as DbUserRow | undefined;
+
+    if (!row) {
+      res.status(404).json({ error: 'Akun Admin Humas dengan email tersebut tidak ditemukan.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    prodDb
+      .prepare('UPDATE users SET password_hash = ?, is_active = 1, updated_at = ? WHERE id = ?')
+      .run(hashPassword(newPassword), now, row.id);
+
+    const updated = prodDb.prepare('SELECT * FROM users WHERE id = ?').get(row.id) as DbUserRow;
+    const token = createSessionToken(updated.id, 'prod');
+    res.json({ token, workspace: 'prod', user: toUserPublic(updated) });
   });
 
   router.get('/auth/demo-accounts', (_req, res) => {

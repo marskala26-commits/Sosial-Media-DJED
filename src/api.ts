@@ -77,6 +77,17 @@ export const api = {
     });
   },
 
+  adminRecovery(payload: {
+    email: string;
+    recoveryKey: string;
+    newPassword: string;
+  }): Promise<AuthResponse> {
+    return apiFetch('/api/auth/admin-recovery', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   getDemoAccounts(): Promise<{ accounts: UserPublic[] }> {
     return apiFetch('/api/auth/demo-accounts');
   },
